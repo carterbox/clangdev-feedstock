@@ -11,13 +11,29 @@
 {% set libclang_soversion = "13" %}
 {% endif %}
 
+{% set rocm_version = "5.5.0" %}
+
 package:
   name: clang_packages
   version: {{ version }}
 
+# https://llvm.org/docs/BuildingADistribution.html
+
+# AMD's llvm is a soft fork (they regularly pull updates from upstream) which
+# is required for HIP. We don't want to clobber the canonical llvm or duplicate
+# all of the build logic in the feedstock. However, the changes between AMD and
+# upstream are significant enough that it's better to download the fork source
+# instead of generating a patch between the two.
+#
+# Figure out which canonical stable release is closest to the AMD rocm release
+# by looking in llvm/CMakeLists.txt to see the llvm version. AMD git tags are
+# rocm-x.x.x and llvm git tags are llvmorg-x.x.x. AMD may not get patch release
+# updates.
 source:
   - url: https://github.com/llvm/llvm-project/releases/download/llvmorg-{{ version.replace(".rc", "-rc") }}/llvm-project-{{ version.replace(".rc", "rc") }}.src.tar.xz  # [fork == 'llvm']
     sha256: 9a56d906a2c81f16f06efc493a646d497c53c2f4f28f0cb1f3c8da7f74350254  # [fork == 'llvm']
+  - url: https://github.com/RadeonOpenCompute/llvm-project/archive/refs/tags/rocm-{{ rocm_version }}.tar.gz  # [fork == 'rocm']
+    sha256: 5dc6c99f612b69ff73145bee17524e3712990100e16445b71634106acf7927cf  # [fork == 'rocm']
     patches:
       - patches/0001-Find-conda-gcc-installation.patch
       - patches/0002-Fix-sysroot-detection-for-linux.patch
@@ -29,9 +45,6 @@ source:
       # Only enable it for TARGET_OS_OSX.
       - patches/0007-Only-error-on-undefined-TARGET_OS_OSX.patch  # [osx and x86_64]
       - patches/0008-set-libclang-SOVERSION-unconditionally.patch
-      # check out git history before LLVM 16 for these patches
-      # - patches/amd-roc-2.7.0.diff   # [variant != "hcc"]
-      # - patches/amd-roc-hcc-2.7.0.diff  # [variant == "hcc"]
     # name folder for easier deletion; we do the equivalent of downloading
     # the subproject sources, so the work folder then has clang in it;
     # for details see build scripts
@@ -39,7 +52,6 @@ source:
 
 build:
   number: {{ build_number }}
-  skip: true  # [variant == "hcc"]
 
 requirements:
   build:
@@ -51,13 +63,13 @@ requirements:
     - m2w64-xz  # [win]
     # "compiling .pyc files" fails without this
     - python >3
-    - llvmdev =={{ version }}    # [build_platform != target_platform]
+    - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
     - libxml2                    # [build_platform != target_platform]
     - zlib                       # [build_platform != target_platform]
     - zstd                       # [build_platform != target_platform]
   host:
     - libcxx {{ cxx_compiler_version }}  # [osx]
-    - llvmdev =={{ version }}
+    - llvmdev =={{ version }}={{ fork }}*
     - libxml2
     - zlib
     - zstd
@@ -87,8 +99,8 @@ outputs:
     script: install_clangdev.bat  # [win]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - zlib     # [unix]
@@ -100,7 +112,7 @@ outputs:
         - cmake
         - ninja  # [win]
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
         - {{ pin_subpackage("clang", exact=True) }}
         - {{ pin_subpackage("clangxx", exact=True) }}
@@ -109,7 +121,7 @@ outputs:
         - {{ pin_subpackage("libclang-cpp", exact=True) }}
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -120,7 +132,7 @@ outputs:
         - {{ pin_subpackage("libclang", exact=True) }}
         - {{ pin_subpackage("libclang-cpp", exact=True) }}
         - {{ pin_compatible("libcxx", max_pin=None) }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
     test:
       commands:
         - test -f "$PREFIX/include/clang/Config/config.h"   # [unix]
@@ -135,8 +147,8 @@ outputs:
       - lib/libclang-cpp.16.dylib  # [osx]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       run_exports:
         - {{ pin_subpackage("libclang-cpp" ~ minor_aware_ext, max_pin="x.x") }}   # [unix]
       ignore_run_exports_from:
@@ -151,12 +163,12 @@ outputs:
         - cmake
         - ninja  # [win]
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -177,8 +189,8 @@ outputs:
       - lib/libclang-cpp.dylib  # [osx]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       run_exports:   # [unix]
         - {{ pin_subpackage("libclang-cpp" ~ minor_aware_ext, max_pin="x.x") }}   # [unix]
       ignore_run_exports_from:
@@ -192,13 +204,13 @@ outputs:
         - cmake
         - ninja  # [win]
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         - {{ pin_subpackage("libclang-cpp" ~ minor_aware_ext, exact=True) }}  # [unix]
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -220,8 +232,8 @@ outputs:
       - lib/libclang.13.dylib        # [osx]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       run_exports:
         # note that the name (e.g. libclang13) does not necessarily
         # match the version lower bound (e.g. >=14.0.0)
@@ -237,13 +249,13 @@ outputs:
         - cmake
         - ninja                      # [win]
         - make                       # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         - {{ pin_subpackage("clang", exact=True) }}
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -283,8 +295,8 @@ outputs:
       - lib/libclang.dylib        # [osx]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       run_exports:
         # note that the name (e.g. libclang13) does not necessarily
         # match the version lower bound (e.g. >=14.0.0)
@@ -300,14 +312,14 @@ outputs:
         - cmake
         - ninja                      # [win]
         - make                       # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         - {{ pin_subpackage("clang", exact=True) }}
         - {{ pin_subpackage("libclang" ~ libclang_soversion, exact=True) }}
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -330,8 +342,8 @@ outputs:
       - Library/bin/clang-{{ major_version }}.exe  # [win]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - libxml2
@@ -344,13 +356,13 @@ outputs:
         - ninja                              # [win]
         - make                               # [unix]
         - libcxx                             # [osx]
-        - llvmdev =={{ version }}            # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*            # [build_platform != target_platform]
       host:
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         - {{ pin_subpackage("libclang-cpp" ~ minor_aware_ext, exact=True) }}  # [unix]
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -382,6 +394,9 @@ outputs:
     script: install_clang_symlinks.sh  # [unix]
     script: install_clang_symlinks.bat  # [win]
     build:
+      track_features:
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - libxml2
@@ -393,7 +408,7 @@ outputs:
         - {{ pin_subpackage("clang-" ~ major_version, exact=True) }}
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -411,8 +426,8 @@ outputs:
     script: install_clangxx.bat  # [win]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - libxml2
@@ -423,7 +438,7 @@ outputs:
         - {{ pin_subpackage("clang", exact=True) }}
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -444,8 +459,8 @@ outputs:
       - bin/clang-format-{{ major_version }}                # [unix]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       # for windows, use the clang-format package.
       skip: true  # [win]
       ignore_run_exports_from:
@@ -460,16 +475,16 @@ outputs:
         - {{ compiler('cxx') }}
         - cmake
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
         - {{ pin_subpackage("clang", exact=True) }}
         - {{ pin_subpackage("clangxx", exact=True) }}
         - {{ pin_subpackage("libclang", exact=True) }}
         - {{ pin_subpackage("libclang-cpp", exact=True) }}
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -490,8 +505,8 @@ outputs:
       - Library/bin/clang-format.exe   # [win]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - libxml2
@@ -505,17 +520,17 @@ outputs:
         - cmake
         - ninja  # [win]
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
         - {{ pin_subpackage("clang", exact=True) }}
         - {{ pin_subpackage("clangxx", exact=True) }}
         - {{ pin_subpackage("libclang", exact=True) }}
         - {{ pin_subpackage("libclang-cpp", exact=True) }}
         - {{ pin_subpackage("clang-format-" ~ major_version, exact=True) }}      # [unix]
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -534,8 +549,8 @@ outputs:
     script: install_clang_tools.bat  # [win]
     build:
       track_features:
-        - hcc          # [variant=="hcc"]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
       ignore_run_exports_from:
         # the build fails if it doesn't find the following, but it's not used
         - zlib     # [unix]
@@ -549,17 +564,17 @@ outputs:
         - cmake
         - ninja  # [win]
         - make   # [unix]
-        - llvmdev =={{ version }}    # [build_platform != target_platform]
+        - llvmdev =={{ version }}={{ fork }}*    # [build_platform != target_platform]
       host:
         - {{ pin_subpackage("clang", exact=True) }}
         - {{ pin_subpackage("clangxx", exact=True) }}
         - {{ pin_subpackage("libclang", exact=True) }}
         - {{ pin_subpackage("libclang-cpp", exact=True) }}
         - {{ pin_subpackage("clang-format", exact=True) }}
-        - llvm =={{ version }}
+        - llvm =={{ version }}={{ fork }}*
         # Use the same requirements as the top-level requirements
         - libcxx {{ cxx_compiler_version }}  # [osx]
-        - llvmdev =={{ version }}
+        - llvmdev =={{ version }}={{ fork }}*
         - libxml2
         - zlib
         - zstd
@@ -582,14 +597,16 @@ outputs:
       # Building this output using this recipe is only supported on unix
       # It can still be installed on Windows as it is marked as `noarch: python`
       skip: true  # [not linux64]
-      string: {{ variant }}_h{{ PKG_HASH }}_{{ build_number }}
+      track_features:
+        - rocm          # [fork=="rocm"]
+      string: {{ fork }}_h{{ PKG_HASH }}_{{ build_number }}
     script: build_python_bindings.sh
     requirements:
       host:
         - python >=3.7
       run:
         - python >=3.7
-        - libclang =={{ version }}
+        - libclang =={{ version }}={{ fork }}*
     test:
       source_files:
         - clang/bindings/python/tests
