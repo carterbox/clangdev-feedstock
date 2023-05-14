@@ -9,6 +9,6 @@ cxx_compiler:        # [osx]
 libclang_soversion:
   - 13
 
-variant:
-  - default
-  - hcc   # [linux]
+fork:
+  - llvm
+  - rocm  # [linux64]
