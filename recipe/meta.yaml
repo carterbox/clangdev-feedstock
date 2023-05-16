@@ -95,8 +95,13 @@ test:
 
 outputs:
   - name: clangdev
-    script: install_clangdev.sh  # [unix]
-    script: install_clangdev.bat  # [win]
+    files:
+      - include/clang
+      - include/clang-c
+      - include/cland-tidy
+      - lib/cmake/clang
+      - lib/libclang*.a
+      - lib/libfindAllSynbols.a
     build:
       track_features:
         - rocm          # [fork=="rocm"]
@@ -141,7 +146,6 @@ outputs:
         - if not exist %LIBRARY_LIB%\\clangAST.lib exit 1            # [win]
 
   - name: libclang-cpp{{ minor_aware_ext }}
-    script: install_libclang_cpp.sh  # [unix]
     files:
       - lib/libclang-cpp.so.16     # [linux]
       - lib/libclang-cpp.16.dylib  # [osx]
@@ -183,7 +187,6 @@ outputs:
 
   - name: libclang-cpp
     # note that this is just an empty wrapper on windows
-    script: install_libclang_cpp.sh  # [unix]
     files:   # [unix]
       - lib/libclang-cpp.so     # [linux]
       - lib/libclang-cpp.dylib  # [osx]
@@ -224,8 +227,6 @@ outputs:
         - if exist %LIBRARY_BIN%\\libclang-cpp.dll exit 1           # [win]
 
   - name: libclang{{ libclang_soversion }}
-    script: install_libclang.sh  # [unix]
-    script: install_libclang.bat  # [win]
     files:
       - Library/bin/libclang-13.dll  # [win]
       - lib/libclang.so.13           # [linux]
@@ -287,8 +288,6 @@ outputs:
         {% endif %}
 
   - name: libclang
-    script: install_libclang.sh  # [unix]
-    script: install_libclang.bat  # [win]
     files:
       - Library/lib/libclang.lib  # [win]
       - lib/libclang.so           # [linux]
@@ -333,8 +332,6 @@ outputs:
         - if not exist %LIBRARY_LIB%\\libclang.lib exit 1  # [win]
 
   - name: clang-{{ major_version }}
-    script: install_clang.sh  # [unix]
-    script: install_clang.bat  # [win]
     files:
       - lib/clang                                  # [unix]
       - bin/clang-{{ major_version }}              # [unix]
@@ -391,8 +388,10 @@ outputs:
         - if not exist %LIBRARY_LIB%\\clang\\{{ version.split('.')[0] }}\\include\\stdatomic.h exit 1    # [win]
 
   - name: clang
-    script: install_clang_symlinks.sh  # [unix]
-    script: install_clang_symlinks.bat  # [win]
+    files:
+      - bin/clang
+      - bin/clang-cl
+      - bin/clang-cpp
     build:
       track_features:
         - rocm          # [fork=="rocm"]
@@ -422,8 +421,9 @@ outputs:
         - clang-cpp --version
 
   - name: clangxx
-    script: install_clangxx.sh  # [unix]
-    script: install_clangxx.bat  # [win]
+    files:
+      - bin/clang++
+      - bin/*-clang++  # $HOST-clang++? $HOST is undefined.
     build:
       track_features:
         - rocm          # [fork=="rocm"]
@@ -454,7 +454,6 @@ outputs:
         - clang++ -v -c mytest.cxx
 
   - name: clang-format-{{ major_version }}
-    script: install_clang_format.sh  # [unix]
     files:
       - bin/clang-format-{{ major_version }}                # [unix]
     build:
@@ -498,8 +497,6 @@ outputs:
         - test ! -f ${PREFIX}/bin/c-index-test                   # [unix]
 
   - name: clang-format
-    script: install_clang_format.sh  # [unix]
-    script: install_clang_format.bat  # [win]
     files:
       - bin/clang-format               # [unix]
       - Library/bin/clang-format.exe   # [win]
@@ -545,8 +542,48 @@ outputs:
         - if exist %LIBRARY_BIN%\\c-index-test.exe exit 1        # [win]
 
   - name: clang-tools
-    script: install_clang_tools.sh  # [unix]
-    script: install_clang_tools.bat  # [win]
+    files:
+      - bin/amdgpu-arch
+      - bin/analyze-build
+      - bin/c-index-test
+      - bin/clang-apply-replacements*
+      - bin/clang-ch*
+      - bin/clang-doc*
+      - bin/clang-extdef-mapping*
+      - bin/clang-include*
+      - bin/clang-linker*
+      - bin/clang-move*
+      - bin/clang-offload*
+      - bin/clang-pseudo*
+      - bin/clang-query*
+      - bin/clang-re*
+      - bin/clang-scan-deps*
+      - bin/clang-tidy*
+      - bin/clangd
+      - bin/diagtool
+      - bin/find-all-symbols
+      - bin/git-clang-format
+      - bin/hmaptool
+      - bin/intercept-build
+      - bin/modularize
+      - bin/nvptx-arch
+      - bin/pp-trace
+      - bin/run-clang-tidy
+      - bin/scan-build
+      - bin/scan-build-py
+      - bin/scan-view
+      - lib/libear
+      - lib/libscanbuild
+      - libexec/analyze-c++
+      - libexec/analyze-cc
+      - libexec/c++-analyzer
+      - libexec/ccc-analyzer
+      - libexec/intercept-c++
+      - libexec/intercept-cc
+      - share/clang
+      - share/man/man1/scan-build.1
+      - share/scan-build
+      - share/scan-view
     build:
       track_features:
         - rocm          # [fork=="rocm"]
